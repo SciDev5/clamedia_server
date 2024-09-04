@@ -9,7 +9,7 @@ async function async_join(proc: ChildProcess): Promise<boolean> {
     })
 }
 
-const TEMP_DATA_FOLDER = "./tmp"
+export const TEMP_DATA_FOLDER = "./tmp"
 const YTDLP = "yt-dlp"
 const FFMPEG = "ffmpeg"
 
