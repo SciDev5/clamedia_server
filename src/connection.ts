@@ -4,7 +4,8 @@ import { is_arr, is_bool, is_dict, is_in_union, is_literal, is_number, is_str, i
 import { Player } from "./player";
 
 export const is_SongInfo = is_dict({
-    name: is_str,
+    title: is_str,
+    uploader: is_str,
     loaded: is_bool,
 }) as (v: unknown) => v is SongInfo
 

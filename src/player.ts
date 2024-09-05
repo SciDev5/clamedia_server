@@ -1,17 +1,10 @@
-import { readdirSync } from "fs"
 import { Connection } from "./connection"
-import { download_video, TEMP_DATA_FOLDER } from "./song_loader"
+import { download_video, get_video_meta, SONGINFO_STASH } from "./song_loader"
 import { SongInfo } from "./connection_types"
 
 export class Player {
     readonly connections = new Set<Connection>()
     readonly queue: string[] = []
-    readonly cached: Map<string, SongInfo> = new Map(
-        readdirSync(TEMP_DATA_FOLDER)
-            .filter(v => v.endsWith(".webm"))
-            .map(v => v.substring(0, v.length - ".webm".length))
-            .map(id => [id, { name: id, loaded: true }])
-    )
     current_song: string | null = null
     current_song_discriminator: number = 0
     is_playing: boolean = true
@@ -20,18 +13,26 @@ export class Player {
     volume: number = 1.0
 
     async req_enqueue(song_id: string) {
-        const cached = this.cached.get(song_id)
+        const cached = SONGINFO_STASH.data.get(song_id)
         if (cached == null) {
-            const song_info: SongInfo = { name: song_id, loaded: false }
+            const song_info: SongInfo = { title: song_id, uploader: "...", loaded: false }
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
-            this.cached.set(song_id, song_info)
+            SONGINFO_STASH.data.set(song_id, song_info)
+            const { title, uploader } = await get_video_meta(song_id) ?? { title: "<missing title>", uploader: "<missing author>" }
+            song_info.title = title
+            song_info.uploader = uploader
+            this.connections.forEach(v => (
+                v.send_songinfo(song_id, song_info)
+            ))
+            SONGINFO_STASH.save()
             await download_video(song_id)
             song_info.loaded = true
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
+            SONGINFO_STASH.save()
             this.queue.push(song_id)
             this.connections.forEach(v => (
                 v.send_queue_change(this.queue)
@@ -48,7 +49,7 @@ export class Player {
                 this.shift_queue()
             }
         } else {
-            // this will break if trying to double queue something before its finished downloading
+            // this will ignore if trying to double queue something before its finished downloading
         }
     }
     async req_skip() {
@@ -73,7 +74,7 @@ export class Player {
         })
     }
     async req_queuechange(new_queue: string[]) {
-        this.queue.splice(0, Infinity, ...new_queue.filter(id => this.cached.has(id)))
+        this.queue.splice(0, Infinity, ...new_queue.filter(id => SONGINFO_STASH.data.has(id)))
     }
 
     private set_playing(playing: boolean) {
@@ -113,7 +114,7 @@ export class Player {
     }
 
     sync_connection(conn: Connection) {
-        for (const [id, info] of this.cached) {
+        for (const [id, info] of SONGINFO_STASH.data) {
             conn.send_songinfo(id, info)
         }
         conn.send_volume(this.volume)
