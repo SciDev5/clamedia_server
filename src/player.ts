@@ -20,9 +20,10 @@ export class Player {
                 v.send_songinfo(song_id, song_info)
             ))
             SONGINFO_STASH.data.set(song_id, song_info)
-            const { title, uploader } = await get_video_meta(song_id) ?? { title: "<missing title>", uploader: "<missing author>" }
+            const { title, uploader, length } = await get_video_meta(song_id) ?? { title: "<missing title>", uploader: "<missing author>", length: -1 }
             song_info.title = title
             song_info.uploader = uploader
+            song_info.length = length
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
