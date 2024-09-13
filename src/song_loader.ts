@@ -53,11 +53,10 @@ async function better_access(path: string): Promise<boolean> {
 
 /// Downloads the video and returns true if it succeeded.
 export async function download_video(id: string, file_name: string = id): Promise<"webm" | "mp4" | null> {
-    await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}.webm -f webm`))
+    await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}`))
     if (await better_access(`${TEMP_DATA_FOLDER}/${file_name}.webm`)) {
         return "webm"
     }
-    await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}.mp4 -f mp4`))
     if (await better_access(`${TEMP_DATA_FOLDER}/${file_name}.mp4`)) {
         return "mp4"
     }
