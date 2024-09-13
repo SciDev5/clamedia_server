@@ -7,6 +7,9 @@ export const is_SongInfo = is_dict({
     title: is_str,
     uploader: is_str,
     loaded: is_bool,
+    failed: is_bool,
+    deleted: is_bool,
+    length: is_number,
 }) as (v: unknown) => v is SongInfo
 
 

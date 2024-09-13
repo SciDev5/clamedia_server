@@ -29,14 +29,14 @@ const YTDLP = "yt-dlp"
 const FFMPEG = "ffmpeg"
 
 /// Gets the video title and uploader.
-export async function get_video_meta(id: string): Promise<{ uploader: string, title: string } | null> {
+export async function get_video_meta(id: string): Promise<{ length: number, uploader: string, title: string } | null> {
     const splitstr = " ;22qi3mmwa7hfmn994433ki; "
-    const ret = await async_join_text(exec(`${YTDLP} --print "%(uploader)s${splitstr}%(title)s" https://youtu.be/${id}`))
+    const ret = await async_join_text(exec(`${YTDLP} --print "%(duration)s${splitstr}%(uploader)s${splitstr}%(title)s" https://youtu.be/${id}`))
     console.log(">>>", ret);
 
     if (ret.includes(splitstr)) {
-        const [uploader, title] = ret.split(splitstr).map(v => v.trim())
-        return { uploader, title }
+        const [duration, uploader, title] = ret.split(splitstr).map(v => v.trim())
+        return { length: parseFloat(duration), uploader, title }
     } else {
         return null
     }

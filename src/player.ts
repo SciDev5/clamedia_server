@@ -1,4 +1,4 @@
-import { Connection } from "./connection"
+import { Connection, is_SongInfo } from "./connection"
 import { download_video, get_video_meta, SONGINFO_STASH } from "./song_loader"
 import { SongInfo } from "./connection_types"
 
@@ -15,7 +15,7 @@ export class Player {
     async req_enqueue(song_id: string) {
         const cached = SONGINFO_STASH.data.get(song_id)
         if (cached == null || cached.deleted || cached.failed) {
-            const song_info: SongInfo & { format?: "webm" | "mp4" } = { title: song_id, uploader: "...", loaded: false, failed: false, deleted: false }
+            const song_info: SongInfo & { format?: "webm" | "mp4" } = { title: song_id, uploader: "...", loaded: false, failed: false, deleted: false, length: -1 }
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
@@ -130,5 +130,62 @@ export class Player {
         conn.send_seek(this.is_playing
             ? Date.now() - this.play_time
             : this.play_time)
+    }
+
+    readonly until_setup = this.setup()
+    private async setup() {
+        const changed_ids = await Promise.all([...SONGINFO_STASH.data.entries()].map(([id, v]: [string, unknown]) => {
+            if (is_SongInfo(v)) {
+                return null
+            } else {
+                return (async () => {
+                    const meta = await get_video_meta(id)
+                    SONGINFO_STASH.data.set(id, meta === null ? typeof v === "object" && v != null ? {
+                        ...v,
+                        title: "title" in v && typeof v.title === "string" ? v.title : "<failed>",
+                        uploader: "uploader" in v && typeof v.uploader === "string" ? v.uploader : "<failed>",
+                        deleted: "deleted" in v && typeof v.deleted === "boolean" ? v.deleted : false,
+                        loaded: "loaded" in v && typeof v.loaded === "boolean" ? v.loaded : false,
+                        length: "length" in v && typeof v.length === "number" ? v.length : -1,
+                        failed: true,
+                        ... "format" in v && (v.format === "mp4" || v.format === "webm") ? { format: v.format } : null
+                    } : {
+                        title: "<failed>",
+                        uploader: "<failed>",
+                        deleted: false,
+                        loaded: false,
+                        failed: true,
+                        length: -1,
+                    } : typeof v === "object" && v != null ? {
+                        deleted: true,
+                        loaded: false,
+                        failed: false,
+                        ...(
+                            "deleted" in v && (typeof v.deleted === "boolean") &&
+                                "loaded" in v && (typeof v.loaded === "boolean") &&
+                                "failed" in v && (typeof v.failed === "boolean")
+                                ? v as { deleted: boolean, loaded: boolean, failed: boolean } : null),
+                        title: meta.title,
+                        uploader: meta.uploader,
+                        length: meta.length,
+                    } : {
+                        title: meta.title,
+                        uploader: meta.uploader,
+                        deleted: true,
+                        loaded: false,
+                        failed: false,
+                        length: meta.length,
+                    })
+                    return id
+                })()
+            }
+        }).filter(v => v != null))
+        const updated_metas = changed_ids.map(id => [id, SONGINFO_STASH.data.get(id)!] satisfies [string, SongInfo])
+
+        this.connections.forEach(conn => {
+            for (const [id, info] of updated_metas) {
+                conn.send_songinfo(id, info)
+            }
+        })
     }
 }
