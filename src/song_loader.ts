@@ -1,7 +1,7 @@
 import { exec, ChildProcess } from "child_process";
 import { SongInfo } from "./connection_types";
-import { readFileSync } from "fs";
-import { writeFile } from "fs/promises";
+import { readFileSync, constants } from "fs";
+import { writeFile, access } from "fs/promises";
 
 
 
@@ -41,9 +41,28 @@ export async function get_video_meta(id: string): Promise<{ uploader: string, ti
         return null
     }
 }
+
+async function better_access(path: string): Promise<boolean> {
+    try {
+        await access(path, constants.R_OK | constants.R_OK)
+        return true
+    } catch {
+        return false
+    }
+}
+
 /// Downloads the video and returns true if it succeeded.
-export async function download_video(id: string, file_name: string = id): Promise<boolean> {
-    return await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}`))
+export async function download_video(id: string, file_name: string = id): Promise<"webm" | "mp4" | null> {
+    await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}.webm -f webm`))
+    if (await better_access(`${TEMP_DATA_FOLDER}/${file_name}.webm`)) {
+        return "webm"
+    }
+    await async_join(exec(`${YTDLP} https://youtu.be/${id} -o ${TEMP_DATA_FOLDER}/${file_name}.mp4 -f mp4`))
+    if (await better_access(`${TEMP_DATA_FOLDER}/${file_name}.mp4`)) {
+        return "mp4"
+    }
+
+    return null
 }
 
 /// Removes the video from the downloaded content, leaving just audio. Returns true if it succeded.
@@ -56,7 +75,7 @@ export async function make_audio_only(file_name: string): Promise<boolean> {
 }
 
 class SongInfoStash {
-    readonly data: Map<string, SongInfo>
+    readonly data: Map<string, SongInfo & { format?: "webm" | "mp4" }>
     constructor() {
         try {
             this.data = new Map(Object.entries(JSON.parse(readFileSync(SONGINFO_FILE, { encoding: "utf8" }))))

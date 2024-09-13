@@ -15,7 +15,7 @@ export class Player {
     async req_enqueue(song_id: string) {
         const cached = SONGINFO_STASH.data.get(song_id)
         if (cached == null) {
-            const song_info: SongInfo = { title: song_id, uploader: "...", loaded: false }
+            const song_info: SongInfo & { format?: "webm" | "mp4" } = { title: song_id, uploader: "...", loaded: false, failed: false, deleted: false }
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
@@ -27,12 +27,18 @@ export class Player {
                 v.send_songinfo(song_id, song_info)
             ))
             SONGINFO_STASH.save()
-            await download_video(song_id)
-            song_info.loaded = true
+            const format = await download_video(song_id)
+            if (format == null) {
+                song_info.failed = true
+            } else {
+                song_info.loaded = true
+                song_info.format = format
+            }
             this.connections.forEach(v => (
                 v.send_songinfo(song_id, song_info)
             ))
             SONGINFO_STASH.save()
+            if (song_info.failed) return
             this.queue.push(song_id)
             this.connections.forEach(v => (
                 v.send_queue_change(this.queue)
