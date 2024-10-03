@@ -1,15 +1,13 @@
 import { Connection, is_SongInfo } from "./connection"
 import { download_video, get_video_meta, SONGINFO_STASH } from "./song_loader"
-import { SongInfo } from "./connection_types"
+import { PlayState, SongInfo } from "./connection_types"
 
 export class Player {
     readonly connections = new Set<Connection>()
     readonly queue: string[] = []
     current_song: string | null = null
     current_song_discriminator: number = 0
-    is_playing: boolean = true
-    // when playing, is the time it started, when paused is the duration it has been playing
-    play_time: number = 0.0
+    playstate: PlayState = { playing: false, time_at: 0 }
     volume: number = 1.0
 
     async req_enqueue(song_id: string) {
@@ -68,14 +66,11 @@ export class Player {
             this.shift_queue()
         }
     }
-    async req_pauseplay(playing: boolean) {
-        this.set_playing(playing)
-    }
-    async req_seek(time: number) {
-        this.seek(time)
+    async req_playstate(playstate: PlayState) {
+        this.set_playstate(playstate)
     }
     async req_volume(volume: number) {
-        this.volume = volume
+        this.volume = Math.min(Math.max(volume, 0.0), 1.0)
         this.connections.forEach(v => {
             v.send_volume(this.volume)
         })
@@ -84,28 +79,10 @@ export class Player {
         this.queue.splice(0, Infinity, ...new_queue.filter(id => SONGINFO_STASH.data.has(id)))
     }
 
-    private set_playing(playing: boolean) {
-        if (this.is_playing === playing) return
-        this.is_playing = playing
-        if (this.is_playing) {
-            // started playing
-            this.play_time = Date.now() - this.play_time
-        } else {
-            // stopped playing
-            this.play_time = this.play_time - Date.now()
-        }
+    private set_playstate(new_playstate: PlayState) {
+        this.playstate = new_playstate
         this.connections.forEach(v => {
-            v.send_pauseplay(this.is_playing)
-        })
-    }
-    private seek(time: number) {
-        if (this.is_playing) {
-            this.play_time = Date.now() - time
-        } else {
-            this.play_time = Date.now() - time
-        }
-        this.connections.forEach(v => {
-            v.send_seek(time)
+            v.send_playstate(this.playstate)
         })
     }
     private shift_queue() {
@@ -117,7 +94,11 @@ export class Player {
             v.send_video_change(this.current_song, this.current_song_discriminator)
             v.send_queue_change(this.queue)
         })
-        this.seek(0)
+        this.set_playstate(this.playstate.playing ? {
+            playing: true, time_start: Date.now(),
+        } : {
+            playing: false, time_at: 0,
+        })
     }
 
     sync_connection(conn: Connection) {
@@ -125,12 +106,9 @@ export class Player {
             conn.send_songinfo(id, info)
         }
         conn.send_volume(this.volume)
-        conn.send_pauseplay(this.is_playing)
         conn.send_queue_change(this.queue)
         conn.send_video_change(this.current_song, this.current_song_discriminator)
-        conn.send_seek(this.is_playing
-            ? Date.now() - this.play_time
-            : this.play_time)
+        conn.send_playstate(this.playstate)
     }
 
     readonly until_setup = this.setup()
