@@ -42,6 +42,15 @@ app.get("/song/:id", (req, res) => {
     res.sendFile(TEMP_DATA_FOLDER + "/" + id + "." + (data.format ?? "webm"), { root: process.cwd() })
 })
 
-app.listen(3001, () => {
-    console.log("listening")
+
+const PORT = process.argv.map(v => {
+    const [, p_str] = v.match(/^-p=(\d+)$/) ?? [null, null]
+    if (p_str == null) return null
+    const p = parseInt(p_str)
+    if (p <= 0xffff) {
+        return p
+    }
+}).find(v => v != null) ?? 3001
+app.listen(PORT, () => {
+    console.log(`listening [port: ${PORT}]`)
 })
