@@ -7,12 +7,17 @@ const { app } = express_ws(express())
 
 const player = new Player()
 
-app.ws("/", ws => {
+app.use((req, res, next) => {
+    console.log(req.originalUrl);
+    next()
+})
+
+app.ws("/ws", ws => {
     player.connections.add(new Connection(ws, player))
 })
 
 app.get("/song/:id", (req, res) => {
-    const id = req.params.id
+    const [, id] = req.params.id.match(/^(.*?)\.(?:webm|mp4)$/) ?? [null, req.params.id]
     console.log(id);
 
     if (/[^a-z0-9_-]/i.test(id)) {
